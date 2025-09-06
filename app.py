@@ -157,8 +157,7 @@ def process_zip_file(uploaded_zip):
     return zip_datasets
 
 # -------------------- SIDEBAR --------------------
-st.sidebar.markdown("**File Upload Limit:** Unlimited (Streamlit default is 200MB per file, but you can upload any number of files)")
-st.sidebar.caption("Note: If you need to increase the per-file size limit, set 'server.maxUploadSize' in .streamlit/config.toml.")
+
 
 
 with st.sidebar.expander("1️⃣ Upload Data & Options", expanded=True):
