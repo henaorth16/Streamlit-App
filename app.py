@@ -10,6 +10,7 @@ from docx import Document
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
+from functools import reduce
 
 st.set_page_config(page_title="Universal Data Filter Ultimate", layout="wide")
 st.title("🔎 Universal Data Filtering System Ultimate")
@@ -170,7 +171,7 @@ with st.sidebar.expander("1️⃣ Upload Data & Options", expanded=True):
     )
     max_rows = st.number_input("Max rows to show", 10, 10000, 1000, step=50)
     show_info = st.checkbox("Show summary info", True)
-    show_preview = st.checkbox("Show original preview", False)
+    show_preview = st.checkbox("Show original preview", False, help="Show first 10 rows of each dataset")
 
 # Initialize session state for datasets
 if 'datasets' not in st.session_state:
@@ -347,7 +348,7 @@ with st.expander("🎛️ Column Filters", expanded=True):
             st.info(f"Filtered {name}: {len(filtered_df)} rows")
 
 # -------------------- ROW SELECTION --------------------
-with st.expander("✅ Select Specific Rows", expanded=True):
+with st.expander("✅ Select Specific Rows", expanded=False):
     row_selection_tabs = st.tabs([f"📋 {name}" for name in filtered_datasets_after_cols.keys()])
     
     final_datasets = {}
@@ -404,24 +405,50 @@ with st.expander("➕ Calculated Column / Formula", expanded=False):
                     st.error(f"Error in formula for {name}: {e}")
 
 # -------------------- COMBINE DATASETS --------------------
+
 with st.expander("🔄 Combine Datasets", expanded=False):
     st.subheader("Combine Filtered Datasets")
     
-    # Add source identifier to each dataset
-    combined_dfs = []
-    for name, df in final_datasets.items():
-        df_with_source = df.copy()
-        df_with_source['_source_dataset'] = name
-        combined_dfs.append(df_with_source)
-    
-    # Combine all datasets
-    if combined_dfs:
-        combined_df = pd.concat(combined_dfs, ignore_index=True)
-        st.info(f"Combined dataset: {len(combined_df)} rows from {len(combined_dfs)} datasets")
-        st.dataframe(combined_df.head(int(max_rows)), use_container_width=True)
+    if final_datasets:  
+        # Find common columns in filtered datasets
+        common_columns = reduce(lambda x, y: x.intersection(y),
+                                (set(df.columns) for df in final_datasets.values()))
+        
+        # Always include "id" as a fallback if it exists
+        options = list(common_columns)
+        if "id" not in options and any("id" in df.columns for df in final_datasets.values()):
+            options.insert(0, "id")
+        
+        # Dropdown for relation column
+        relation_col = st.selectbox("Choose column to relate datasets", options)
+        
+        # Merge filtered datasets
+        combined_df = None
+        for i, (name, df) in enumerate(final_datasets.items()):
+            df_copy = df.copy()
+            # df_copy["_source_dataset"] = name  # track origin
+            
+            if combined_df is None:
+                combined_df = df_copy
+            else:
+                combined_df = pd.merge(
+                    combined_df,
+                    df_copy,
+                    on=relation_col,
+                    how="outer",
+                    suffixes=("", f"_{i}")
+                )
+        
+        if combined_df is not None and not combined_df.empty:
+            st.info(
+                f"Combined dataset: {len(combined_df)} rows "
+                f"from {len(final_datasets)} filtered datasets (key = '{relation_col}')"
+            )
+            st.dataframe(combined_df.head(int(max_rows)), use_container_width=True)
+        else:
+            st.warning("No filtered data to combine")
     else:
-        combined_df = pd.DataFrame()
-        st.warning("No datasets to combine")
+        st.warning("No filtered datasets available for combining")
 
 # -------------------- VISUALIZATION --------------------
 with st.expander("📊 Quick Visualization", expanded=False):
